@@ -2,6 +2,7 @@
 #include <DallasTemperature.h>
 #include "DHT.h"
 #include <DS3231.h>
+#include <EEPROM.h>
 
 #define AnalogRead 1000 //период проверки обновлений значений температуры, ms
 #define DrawTime 2000 //период обновления экрана, ms
@@ -16,6 +17,8 @@
 #define MinBatteryVoltage 2.9 //Напряжение полностью разряженной батареи (значение на ацп)
 #define t1Hour 20 //час отправки значений, ms
 #define t1Minute 10 //минута отправки значений, ms
+
+//19 ячейка EEPROM - хранит порядковый номер последней записи в архив
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
@@ -39,8 +42,32 @@ bool PM, g;
 
 bool timerCompleted = 0;
 float temp1, temp2, temp3, humidity;
-
+byte adress; //порядковый номер записей в архив
 //---------------- ФУНКЦИИ ----------------
+void writeToArchive (byte adress1, float value1, float value2, float value3, float value4) {
+  if (adress1 > 83) return;
+  
+  int adr2 = 20+adress1*12;
+  int intValue1 = round(value1*100);
+  int intValue2 = round(value2*100);
+  int intValue3 = round(value3*100);
+  int intValue4 = round(value4*100);
+  
+  EEPROM.write(adr2, intValue1);
+  EEPROM.write(adr2+1, intValue1>>8); 
+  EEPROM.write(adr2+2, intValue2);
+  EEPROM.write(adr2+3, intValue2>>8); 
+  EEPROM.write(adr2+4, intValue3);
+  EEPROM.write(adr2+5, intValue3>>8); 
+  EEPROM.write(adr2+6, intValue4);
+  EEPROM.write(adr2+7, intValue4>>8); 
+  EEPROM.write(adr2+8, (year<<2) | (month>>2));
+  EEPROM.write(adr2+9, ((month<<6) | date));  
+  EEPROM.write(adr2+10, hour);
+  EEPROM.write(adr2+11, minute); 
+  EEPROM.write(19, adress1);
+}
+
 
 //функция возвратит 1 только при первом совпадении времени таймера и текущего времени
 bool checkTimer() {
@@ -98,7 +125,8 @@ void DrawMenu () {
   getTime();
   updateTempValue();
   if (checkTimer()) {
-    
+    writeToArchive(adress, temp1, temp2, temp3, humidity);
+    adress++;  
   }
   
 }
@@ -120,6 +148,8 @@ void setup() {
   sensors.setResolution(Thermometer1, 10);
   sensors.setResolution(Thermometer2, 10);
   dht.begin();
+
+  adress=EEPROM.read(19); //последняя записанная ячейка
 }
 
 //прерывание, формирует мини операционную систему (system)
